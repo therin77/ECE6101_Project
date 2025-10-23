@@ -121,6 +121,19 @@ for i in range(combined_and_sorted):
 print(combined_and_sorted[1])
 """
 
+"""
+arr1 = np.array([10, 20, 30, 40, 50, 60, 70])
+arr2 = np.array(['A', 'B', 'A', 'C', 'B', 'A', 'C'])
+
+# Split based on 'A' in arr2
+split_A = arr1[arr2 == 'A']
+print(f"Elements corresponding to 'A': {split_A}")
+
+# Split based on 'B' in arr2
+split_B = arr1[arr2 == 'B']
+print(f"Elements corresponding to 'B': {split_B}")
+"""
+
 
 
 

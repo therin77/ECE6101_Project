@@ -2,15 +2,18 @@ from numpy.random import default_rng
 import numpy as np
 
 
-def mm1(arrival_rate, service_rate, n, seed = 1234567):
+def mm1(arrival_rate, service_rate, n, seed = 1234567, a = 1, input = []):
     
-    #constants
+    #initialize RNG
     rng = default_rng(seed)
-    #arrive = depart = 0.0
+   
+    #initialize arrays
     arrive = np.zeros((n,))
     depart = np.zeros((n,))
     delay = np.zeros((n,))
     num_pkt = np.zeros((n,))
+    
+    #constants
     mean_interarrival_time = 1.0 / arrival_rate
     mean_service_time = 1.0 / service_rate
     
@@ -18,32 +21,60 @@ def mm1(arrival_rate, service_rate, n, seed = 1234567):
     #loop through packets
     for i in range(0, n):
         
-        #generate inter-arrival
-        int_arr = rng.exponential(mean_interarrival_time)
+        if a == 1:
+            #generate inter-arrival
+            int_arr = rng.exponential(mean_interarrival_time)
+            #determine arrival in time and start of service
+            if i == 0:
+                arrive[i] = int_arr
+                start  = arrive[i]
+                num_pkt[i] = 1
+                
+            if i != 0:
+                arrive[i] = arrive[i-1] + int_arr
+                start = max(arrive[i], depart[i-1])
+                
+                #num of pkts in system
+                if arrive[i] >  depart[i-1]:
+                    num_pkt[i] =  1
+                if  arrive[i] <  depart[i-1]:
+                    z = i-1
+                    c = 1
+                    while True:
+                        if arrive[i] <  depart[z]:
+                            z = z-1
+                            c = c + 1
+                        else:
+                            num_pkt[i]  = c
+                            break
+            
+        if a == 2:
+            
+            #use arrival from past queue
+            arrive[i] = input[i]
         
-        #determine arrival  in time and start of service
-        if i == 0:
-            arrive[i] = int_arr
-            start  = arrive[i]
-            num_pkt[i] = 1
-            
-        if i != 0:
-            arrive[i] = arrive[i-1] + int_arr
-            start = max(arrive[i], depart[i-1])
-            
-            #num of pkts in system
-            if arrive[i] >  depart[i-1]:
-                num_pkt[i] =  1
-            if  arrive[i] <  depart[i-1]:
-                z = i-1
-                c = 1
-                while True:
-                    if arrive[i] <  depart[z]:
-                        z = z-1
-                        c = c + 1
-                    else:
-                        num_pkt[i]  = c
-                        break
+            #determine arrival in time and start of service
+            if i == 0:
+                start  = arrive[i]
+                num_pkt[i] = 1
+                
+            if i != 0:
+                
+                start = max(arrive[i], depart[i-1])
+                
+                #num of pkts in system
+                if arrive[i] >  depart[i-1]:
+                    num_pkt[i] =  1
+                if  arrive[i] <  depart[i-1]:
+                    z = i-1
+                    c = 1
+                    while True:
+                        if arrive[i] <  depart[z]:
+                            z = z-1
+                            c = c + 1
+                        else:
+                            num_pkt[i]  = c
+                            break
        
         delay[i] = rng.exponential(mean_service_time)
         depart[i] = start + delay[i]
@@ -73,7 +104,7 @@ def rand_queue(N, n):
 arrival_rate = 50 #add ince 50-1200pkt/s 50 incr
 C = 10e6  #link capacity/mu in bits/s
 pkt_length = 1000*8 #bits per packet from bytes
-n = 10 #50000 #number of packets
+n = 100 #50000 #number of packets
 N = 4 #simulation number
 
 q1 = np.zeros((n,))
@@ -88,7 +119,8 @@ C_conv = C*1/pkt_length
 #FIRST LAYER
 #############
 
-depart_lay1 = mm1(arrival_rate, C_conv, n, seed=1234567)
+#sim through queue
+depart_lay1 = mm1(arrival_rate, C_conv, n, seed=1234567, a =1)
 
 
 #############
@@ -97,42 +129,38 @@ depart_lay1 = mm1(arrival_rate, C_conv, n, seed=1234567)
 
 #determine prob of each queue and determine which queue used
 random_numbers = rand_queue(N, n)
-random_numbers_str = [str(x) for x in random_numbers]
-print(random_numbers_str)
+random_numbers_str = np.array([str(x) for x in random_numbers])
 
-#run each queue
+#seperate into imput for queue
 
 q1 = depart_lay1[random_numbers_str == '0']
-#q2 = depart_lay1[random_numbers == 1]
-#q3 = depart_lay1[random_numbers == 2]
-#q4 = depart_lay1[random_numbers == 3]
-print(q1)
+q2 = depart_lay1[random_numbers_str == '1']
+q3 = depart_lay1[random_numbers_str == '2']
+q4 = depart_lay1[random_numbers_str == '3']
 
-"""
-combined_and_sorted = sorted(zip(random_numbers, depart_lay1))
+#sim through queues
+depart_lay2_1 = mm1(arrival_rate, C_conv, len(q1), seed=1234567, a=2, input = q1)
+depart_lay2_2 = mm1(arrival_rate, C_conv, len(q2), seed=1234567, a=2, input = q2)
+depart_lay2_3 = mm1(arrival_rate, C_conv, len(q3), seed=1234567, a=2, input = q3)
+depart_lay2_4 = mm1(arrival_rate, C_conv, len(q4), seed=1234567, a=2, input = q4)
 
-queue_num, times= zip(*combined_and_sorted)
 
-for i in range(combined_and_sorted):
-    
-    if queue_num()
-    
+#############
+#THIRD LAYER
+#############
 
-print(combined_and_sorted[1])
-"""
+#combine departure times of all queues together
+q5 = np.concatenate((depart_lay2_1, depart_lay2_2, depart_lay2_3, depart_lay2_4), axis=0)
+q5 = np.sort(q5)
 
-"""
-arr1 = np.array([10, 20, 30, 40, 50, 60, 70])
-arr2 = np.array(['A', 'B', 'A', 'C', 'B', 'A', 'C'])
+#sim through queue
+depart_lay3_1 = mm1(arrival_rate, C_conv, len(q5), seed=1234567, a=2, input = q5)
 
-# Split based on 'A' in arr2
-split_A = arr1[arr2 == 'A']
-print(f"Elements corresponding to 'A': {split_A}")
 
-# Split based on 'B' in arr2
-split_B = arr1[arr2 == 'B']
-print(f"Elements corresponding to 'B': {split_B}")
-"""
+
+
+
+
 
 
 

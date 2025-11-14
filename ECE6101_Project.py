@@ -6,15 +6,15 @@ import matplotlib.pyplot as plt
 def mm1(arrival_rate, service_rate, n, seed = 1234567, a = 1, input = []):
 
     
-    
     #initialize RNG
-    rng = default_rng(seed)
+    #rng = default_rng(seed)
+    rng = np.random.default_rng()
    
     #initialize arrays
     arrive = np.zeros((n,))
     depart = np.zeros((n,))
     delay = np.zeros((n,))
-    num_pkt = np.zeros((n,))
+    serv_time = np.zeros((n,))
     
     #constants
     mean_interarrival_time = 1.0 / arrival_rate
@@ -23,66 +23,41 @@ def mm1(arrival_rate, service_rate, n, seed = 1234567, a = 1, input = []):
     
     #loop through packets
     for i in range(0, n):
+        
+        #genrate interarrival times
         if a == 1:
             #generate inter-arrival
             int_arr = rng.exponential(mean_interarrival_time)
+            
             #determine arrival in time and start of service
             if i == 0:
                 arrive[i] = int_arr
                 start  = arrive[i]
-                num_pkt[i] = 1
                 
             if i != 0:
                 arrive[i] = arrive[i-1] + int_arr
                 start = max(arrive[i], depart[i-1])
-                
-                #num of pkts in system
-                if arrive[i] >  depart[i-1]:
-                    num_pkt[i] =  1
-                if  arrive[i] <  depart[i-1]:
-                    z = i-1
-                    c = 1
-                    while True:
-                        if arrive[i] <  depart[z]:
-                            z = z-1
-                            c = c + 1
-                        else:
-                            num_pkt[i]  = c
-                            break
-            
+               
+        #interarrival from outputs of previous queue
         if a == 2:
-            
             #use arrival from past queue
             arrive[i] = input[i]
         
             #determine arrival in time and start of service
             if i == 0:
                 start  = arrive[i]
-                num_pkt[i] = 1
                 
             if i != 0:
-                
                 start = max(arrive[i], depart[i-1])
                 
-                #num of pkts in system
-                if arrive[i] >  depart[i-1]:
-                    num_pkt[i] =  1
-                if  arrive[i] <  depart[i-1]:
-                    z = i-1
-                    c = 1
-                    while True:
-                        if arrive[i] <  depart[z]:
-                            z = z-1
-                            c = c + 1
-                        else:
-                            num_pkt[i]  = c
-                            break
-       
-        delay[i] = rng.exponential(mean_service_time)
-        depart[i] = start + delay[i]
+        serv_time[i] = rng.exponential(mean_service_time)
+        depart[i] = start + serv_time[i]
+        delay[i] = start - arrive[i] + serv_time[i]
         
     avg_delay = 1/n*np.sum(delay)
-    avg_pkt = 1/n*np.sum(num_pkt)
+    avg_pkt = arrival_rate*avg_delay
+    #avg_pkt = 1/n*np.sum(num_pkt)
+    #avg_delay = avg_pkt/arrival_rate
     print(avg_delay, avg_pkt)
     
     return depart, avg_delay, avg_pkt
@@ -105,7 +80,7 @@ def rand_queue(N, n):
 arrival_rate_it = np.arange(50, 1200, 50) #add ince 50-1200pkt/s 50 incr
 C = 10e6  #link capacity/mu in bits/s
 pkt_length = 1000*8 #bits per packet from bytes
-n = 100 #50000 #number of packets
+n = 50000 #number of packets
 N = 4 #simulation number
 
 #list of arrival times for layer 2 queues
@@ -249,7 +224,6 @@ for i in range(len(arrival_rate_it)):
     
         q5 = depart_lay2_1
     
-    
     #############
     #THIRD LAYER
     #############
@@ -303,7 +277,7 @@ axs[2, 1].set_ylabel("Average Packet Delay")
 # Adjust layout to prevent titles and labels from overlapping
 plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
-plt.suptitle('Queue Avg Pkt Delay N = 1', fontsize=16)
+plt.suptitle('Queue Avg Pkt Delay N = 4', fontsize=16)
 
 # Display the plot
 plt.show()
@@ -344,7 +318,7 @@ axs[2, 1].set_ylabel("Average Number of Pkts")
 # Adjust layout to prevent titles and labels from overlapping
 plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
-plt.suptitle('Queue Avg Num of Pkts N = 1', fontsize=16)
+plt.suptitle('Queue Avg Num of Pkts N = 4', fontsize=16)
 
 # Display the plot
 plt.show()

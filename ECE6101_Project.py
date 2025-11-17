@@ -1,13 +1,30 @@
-from numpy.random import default_rng
+##################################
+#ECE6101 Project: Simulate system of queues for study of Kleinrock’s Independence Approximation
+#Developed by: Kate Gothberg
+#Last Edited: 11/17/2025
+##################################
+
+#modules used
 import numpy as np
 import matplotlib.pyplot as plt
 
+debug = 0
 
-def mm1(arrival_rate, service_rate, n, seed = 1234567, a = 1, input = []):
-
-    
+#queue : simulates queues of system
+#loosely based of this guy's code: https://stackoverflow.com/questions/73384766/simple-m-m-1-queuing-simulation-with-simpy-departure-placement-issue
+#inputs:
+#   -arrival rate: if a = 1, use to sim arrival times, else unused
+#   -service rate: rate of service of server
+#   -n: number of packets to be served
+#   -a: if a = 1: generate interarrival times,  a = 2: interarrival based on inpout array
+#   -input: if a = 2, input array of interarrival times
+#outputs:
+#   -depart: departure times of each packet served
+#   -avg_delay: average time in subsystem for each packet
+#   -avg_pkt: average number of packets in subsystem (via Little's Law)
+def queue(arrival_rate, service_rate, n, a = 1, input = []):
+ 
     #initialize RNG
-    #rng = default_rng(seed)
     rng = np.random.default_rng()
    
     #initialize arrays
@@ -20,16 +37,16 @@ def mm1(arrival_rate, service_rate, n, seed = 1234567, a = 1, input = []):
     mean_interarrival_time = 1.0 / arrival_rate
     mean_service_time = 1.0 / service_rate
     
-    
-    #loop through packets
+    #loop through simulation for each packet
     for i in range(0, n):
         
-        #genrate interarrival times
+        #if no input array, generate interarrival times and time packet in system
         if a == 1:
+            
             #generate inter-arrival
             int_arr = rng.exponential(mean_interarrival_time)
             
-            #determine arrival in time and start of service
+            #determine arrival and start time of service
             if i == 0:
                 arrive[i] = int_arr
                 start  = arrive[i]
@@ -40,30 +57,40 @@ def mm1(arrival_rate, service_rate, n, seed = 1234567, a = 1, input = []):
                
         #interarrival from outputs of previous queue
         if a == 2:
+            
             #use arrival from past queue
             arrive[i] = input[i]
         
-            #determine arrival in time and start of service
+            #determine arrival and start time of service
             if i == 0:
                 start  = arrive[i]
                 
             if i != 0:
                 start = max(arrive[i], depart[i-1])
                 
+        #calculate service time, departure time, and time in system
         serv_time[i] = rng.exponential(mean_service_time)
         depart[i] = start + serv_time[i]
         delay[i] = start - arrive[i] + serv_time[i]
         
+    #calculate average delay via average and avg num of packets via Little's Law
     avg_delay = 1/n*np.sum(delay)
     avg_pkt = arrival_rate*avg_delay
-    #avg_pkt = 1/n*np.sum(num_pkt)
-    #avg_delay = avg_pkt/arrival_rate
-    print(avg_delay, avg_pkt)
+    
+    if debug == 1:
+        print(avg_delay, avg_pkt)
     
     return depart, avg_delay, avg_pkt
 
+#rand_queue : random routing, aka which queue is chosen per packet
+#inputs:
+#   -N: number of queues
+#   -n: number of packets
+#outputs:
+#   -random_numbers: vector of which queue for each packet
 def rand_queue(N, n):
     
+    #create range of N queues, find prob for each if equi-probable, then assign queue/packet
     num_queues = np.arange(N)
     prob = np.ones((len(num_queues), ))/N
     random_numbers = np.random.choice(num_queues, size=n, p=prob)
@@ -75,13 +102,20 @@ def rand_queue(N, n):
 #MAIN PROGRAM
 ####################################################
 
-#initialize variables
+#############
+#INITIALIZE VARIABLES
+#############
 
+#given in project description
 arrival_rate_it = np.arange(50, 1200, 50) #add ince 50-1200pkt/s 50 incr
-C = 10e6  #link capacity/mu in bits/s
-pkt_length = 1000*8 #bits per packet from bytes
-n = 50000 #number of packets
-N_int = [1, 2, 3, 4] #simulation number
+C = 10e6                                  #link capacity/mu in bits/s
+pkt_length = 1000*8                       #bits per packet from bytes
+n = 50000                                 #number of packets
+N_int = [1, 2, 3, 4]                      #simulation number
+
+#############
+#INITIALIZE VECTORS
+#############
 
 #list of arrival times for layer 2 queues
 q1 = np.zeros((n,))
@@ -106,31 +140,39 @@ pk2_4 = np.zeros((len(arrival_rate_it),))
 pk3_1 = np.zeros((len(arrival_rate_it),))
 
 
-#convert C to pkts/s
+#convert C to pkts/s so same units
 C_conv = C*1/pkt_length
 
+#############
+#ITERATE # OF QUEUES
+#############
 for k in range(len(N_int)):
     
+    #set number of queues for iteration
     N = N_int[k]
-
+    
+    #############
+    #ITERATE ARRIVAL TIMES
+    #############
     for i in range(len(arrival_rate_it)):
     
         #set arrival rate for iteration
         arrival_rate = arrival_rate_it[i] 
         
-        print(arrival_rate)
+        if debug == 1:
+            print(arrival_rate)
+            print("Delay :     # pkt:")
         
         #############
         #FIRST LAYER
         #############
         
         #sim through queue
-        depart_lay1, de, s = mm1(arrival_rate, C_conv, n, seed=1234567, a =1)
+        depart_lay1, de, s = queue(arrival_rate, C_conv, n, a =1)
         
-        #set delay and packet for queues and arrival rate
+        #set delay and packet for arrival rate
         de1_1[i] = de
         pk1_1[i] = s
-        
         
         #############
         #SECOND LAYER
@@ -149,12 +191,12 @@ for k in range(len(N_int)):
             q4 = depart_lay1[random_numbers_str == '3']
             
             #sim through queues
-            depart_lay2_1, de1, s1 = mm1(arrival_rate, C_conv, len(q1), seed=1234567, a=2, input = q1)
-            depart_lay2_2, de2, s2 = mm1(arrival_rate, C_conv, len(q2), seed=1234567, a=2, input = q2)
-            depart_lay2_3, de3, s3 = mm1(arrival_rate, C_conv, len(q3), seed=1234567, a=2, input = q3)
-            depart_lay2_4, de4, s4 = mm1(arrival_rate, C_conv, len(q4), seed=1234567, a=2, input = q4)
+            depart_lay2_1, de1, s1 = queue(arrival_rate, C_conv, len(q1), a=2, input = q1)
+            depart_lay2_2, de2, s2 = queue(arrival_rate, C_conv, len(q2), a=2, input = q2)
+            depart_lay2_3, de3, s3 = queue(arrival_rate, C_conv, len(q3), a=2, input = q3)
+            depart_lay2_4, de4, s4 = queue(arrival_rate, C_conv, len(q4), a=2, input = q4)
             
-            #set delay and packet for queues and arrival rate
+            #set delay and packet for specific queue and arrival rate
             de2_1[i] = de1
             de2_2[i] = de2
             de2_3[i] = de3
@@ -165,6 +207,7 @@ for k in range(len(N_int)):
             pk2_3[i] = s3
             pk2_4[i] = s4
             
+            #combine all depart times to 1 stream for 3rd layer
             q5 = np.concatenate((depart_lay2_1, depart_lay2_2, depart_lay2_3, depart_lay2_4), axis=0)
             q5 = np.sort(q5)
             
@@ -176,11 +219,11 @@ for k in range(len(N_int)):
             q3 = depart_lay1[random_numbers_str == '2']
             
             #sim through queues
-            depart_lay2_1, de1, s1 = mm1(arrival_rate, C_conv, len(q1), seed=1234567, a=2, input = q1)
-            depart_lay2_2, de2, s2 = mm1(arrival_rate, C_conv, len(q2), seed=1234567, a=2, input = q2)
-            depart_lay2_3, de3, s3 = mm1(arrival_rate, C_conv, len(q3), seed=1234567, a=2, input = q3)
+            depart_lay2_1, de1, s1 = queue(arrival_rate, C_conv, len(q1), a=2, input = q1)
+            depart_lay2_2, de2, s2 = queue(arrival_rate, C_conv, len(q2), a=2, input = q2)
+            depart_lay2_3, de3, s3 = queue(arrival_rate, C_conv, len(q3), a=2, input = q3)
             
-            #set delay and packet for queues and arrival rate
+            #set delay and packet for specific queue and arrival rate
             de2_1[i] = de1
             de2_2[i] = de2
             de2_3[i] = de3
@@ -189,6 +232,7 @@ for k in range(len(N_int)):
             pk2_2[i] = s2
             pk2_3[i] = s3
             
+            #combine all depart times to 1 stream for 3rd layer
             q5 = np.concatenate((depart_lay2_1, depart_lay2_2, depart_lay2_3), axis=0)
             q5 = np.sort(q5)
             
@@ -200,16 +244,17 @@ for k in range(len(N_int)):
         
             
             #sim through queues
-            depart_lay2_1, de1, s1 = mm1(arrival_rate, C_conv, len(q1), seed=1234567, a=2, input = q1)
-            depart_lay2_2, de2, s2 = mm1(arrival_rate, C_conv, len(q2), seed=1234567, a=2, input = q2)
+            depart_lay2_1, de1, s1 = queue(arrival_rate, C_conv, len(q1), a=2, input = q1)
+            depart_lay2_2, de2, s2 = queue(arrival_rate, C_conv, len(q2), a=2, input = q2)
             
-            #set delay and packet for queues and arrival rate
+            #set delay and packet for specific queue and arrival rate
             de2_1[i] = de1
             de2_2[i] = de2
             
             pk2_1[i] = s1
             pk2_2[i] = s2
-        
+            
+            #combine all depart times to 1 stream for 3rd layer
             q5 = np.concatenate((depart_lay2_1, depart_lay2_2), axis=0)
             q5 = np.sort(q5)
             
@@ -220,12 +265,13 @@ for k in range(len(N_int)):
         
             
             #sim through queues
-            depart_lay2_1, de1, s1 = mm1(arrival_rate, C_conv, len(q1), seed=1234567, a=2, input = q1)
+            depart_lay2_1, de1, s1 = queue(arrival_rate, C_conv, len(q1), a=2, input = q1)
             
-            #set delay and packet for queues and arrival rate
+            #set delay and packet for specific queue and arrival rate
             de2_1[i] = de1
             pk2_1[i] = s1
         
+            #combine all depart times to 1 stream for 3rd layer
             q5 = depart_lay2_1
         
         #############
@@ -233,38 +279,42 @@ for k in range(len(N_int)):
         #############
         
         #sim through queue
-        depart_lay3_1, de, s = mm1(arrival_rate, C_conv, len(q5), seed=1234567, a=2, input = q5)
+        depart_lay3_1, de, s = queue(arrival_rate, C_conv, len(q5), a=2, input = q5)
     
-        #set delay and packet for queues and arrival rate
+        #set delay and packet for queue and arrival rate
         de3_1[i] = de
         pk3_1[i] = s
     
     
-    
     #############
-    #THEORETICAL VALUES
+    #CALC THEORETICAL VALUES
     #############
     
+    #theoretical delay M/M/1 queue
     theo_delay_1_1 = 1/(C_conv*np.ones((len(arrival_rate_it),)) - arrival_rate_it)
     theo_delay_2_1 = 1/(C_conv*np.ones((len(arrival_rate_it),)) - arrival_rate_it/N)
     theo_delay_3_1 = 1/(C_conv*np.ones((len(arrival_rate_it),)) - arrival_rate_it)
     
+    #theoretical # of packets M/M/1 queue
     theo_num_1_1 = arrival_rate_it*theo_delay_1_1
     theo_num_2_1 = arrival_rate_it/N*theo_delay_2_1
     theo_num_3_1 = arrival_rate_it*theo_delay_3_1
     
     #############
-    #DIFFERENCE SIM/THEO
+    #CALC DIFFERENCE SIM/THEO
     #############
     
+    #difference delay theo vs sim
     dif_del_1_1 = np.absolute(theo_delay_1_1 - de1_1)
     dif_del_2_1 = np.absolute(theo_delay_2_1 - de2_1)
     dif_del_3_1 = np.absolute(theo_delay_3_1 - de3_1)
     
+    #difference delay theo vs sim
     dif_pkt_1_1 = np.absolute(theo_num_1_1 - pk1_1)
     dif_pkt_2_1 = np.absolute(theo_num_2_1 - pk2_1)
     dif_pkt_3_1 = np.absolute(theo_num_3_1 - pk3_1)
     
+    #turn differences into matrix so can plot all 4 N options
     if N == 1:
         del_1_1 = dif_del_1_1
         del_2_1 = dif_del_2_1
@@ -289,149 +339,125 @@ for k in range(len(N_int)):
     #PLOT SIM VS THEO
     #############
     
-    #avg pkt delay
+    #plot for each N
     
     fig, axs = plt.subplots(3, 2, figsize=(10, 8), sharex=False, sharey=False)
     
     axs[0, 0].plot(arrival_rate_it, de1_1, color='blue')
     axs[0, 0].plot(arrival_rate_it, theo_delay_1_1, color='green')
-    axs[0, 0].set_title('Queue 1-1')
-    axs[0, 0].set_xlabel("Arrival Rate")
-    axs[0, 0].set_ylabel("Average Packet Delay")
+    axs[0, 0].set_title('Queue 1-1 Delay')
+    axs[0, 0].set_xlabel("Arrival Rate (pkt/s)")
+    axs[0, 0].set_ylabel("Average Packet Delay (s)")
     
     axs[1, 0].plot(arrival_rate_it, de2_1, color='blue')
     axs[1, 0].plot(arrival_rate_it, theo_delay_2_1, color='green')
-    axs[1, 0].set_title('Queue 2-1')
-    axs[1, 0].set_xlabel("Arrival Rate")
-    axs[1, 0].set_ylabel("Average Packet Delay")
+    axs[1, 0].set_title('Queue 2-1 Delay')
+    axs[1, 0].set_xlabel("Arrival Rate (pkt/s)")
+    axs[1, 0].set_ylabel("Average Packet Delay (s)")
     
     axs[2, 0].plot(arrival_rate_it, de3_1, color='blue')
     axs[2, 0].plot(arrival_rate_it, theo_delay_3_1, color='green')
-    axs[2, 0].set_title('Queue 3-1')
-    axs[2, 0].set_xlabel("Arrival Rate")
-    axs[2, 0].set_ylabel("Average Packet Delay")
+    axs[2, 0].set_title('Queue 3-1 Delay')
+    axs[2, 0].set_xlabel("Arrival Rate (pkt/s)")
+    axs[2, 0].set_ylabel("Average Packet Delay (s)")
     
     axs[0, 1].plot(arrival_rate_it, pk1_1, color='blue')
     axs[0, 1].plot(arrival_rate_it, theo_num_1_1, color='green')
-    axs[0, 1].set_title('Queue 1-1')
-    axs[0, 1].set_xlabel("Arrival Rate")
+    axs[0, 1].set_title('Queue 1-1 Num. of Packets')
+    axs[0, 1].set_xlabel("Arrival Rate (pkt/s)")
     axs[0, 1].set_ylabel("Average Number of Pkts")
     
     axs[1, 1].plot(arrival_rate_it, pk2_1, color='blue')
     axs[1, 1].plot(arrival_rate_it, theo_num_2_1, color='green')
-    axs[1, 1].set_title('Queue 2-1')
-    axs[1, 1].set_xlabel("Arrival Rate")
+    axs[1, 1].set_title('Queue 2-1 Num. of Packets')
+    axs[1, 1].set_xlabel("Arrival Rate (pkt/s)")
     axs[1, 1].set_ylabel("Average Number of Pkts")
     
     axs[2, 1].plot(arrival_rate_it, pk3_1, color='blue')
     axs[2, 1].plot(arrival_rate_it, theo_num_3_1, color='green')
-    axs[2, 1].set_title('Queue 3-1')
-    axs[2, 1].set_xlabel("Arrival Rate")
+    axs[2, 1].set_title('Queue 3-1 Num. of Packets')
+    axs[2, 1].set_xlabel("Arrival Rate (pkt/s)")
     axs[2, 1].set_ylabel("Average Number of Pkts")
     
-    
-    # Adjust layout to prevent titles and labels from overlapping
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    
     plt.suptitle('Queue Avg Values N = ' + str(N), fontsize=16)
-    
     labels = ['Sim.', 'Theor.']
-    
     fig.legend(labels, loc='lower right', bbox_to_anchor=(1,-0.1), ncol=len(labels), bbox_transform=fig.transFigure)
-    
-    # Display the plot
     plt.show()
 
 #############
 #PLOT DIFF SIM VS THEO
 #############
 
-#1-1
+#Queue 1-1
 
 fig, axs = plt.subplots(2, 1, figsize=(10, 8), sharex=False, sharey=False)
 
+#iterate over each N
 for i, row in enumerate(del_1_1):
-    axs[0].plot(arrival_rate_it, row)
-axs[0].plot(arrival_rate_it, dif_del_1_1, color='green')
+    axs[0].plot(arrival_rate_it, row, label='N = ' + str(i+1))
 axs[0].set_title('Queue 1-1 Delay')
-axs[0].set_xlabel("Arrival Rate")
-axs[0].set_ylabel("Difference")
+axs[0].set_xlabel("Arrival Rate (pkt/s)")
+axs[0].set_ylabel("Difference (s)")
+axs[0].legend(loc='upper left')
 
+#iterate over each N
 for i, row in enumerate(pkt_1_1):
-    axs[1].plot(arrival_rate_it, row)
-axs[1].plot(arrival_rate_it, dif_pkt_1_1, color='green')
-axs[1].set_title('Queue 1-1 Packet')
-axs[1].set_xlabel("Arrival Rate")
+    axs[1].plot(arrival_rate_it, row, label='N = ' + str(i+1))
+axs[1].set_title('Queue 1-1 Num. of Packets')
+axs[1].set_xlabel("Arrival Rate (pkt/s)")
 axs[1].set_ylabel("Difference")
+axs[1].legend(loc='upper left')
 
-
-# Adjust layout to prevent titles and labels from overlapping
 plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-
 plt.suptitle('Difference Theo VS Sim 1-1', fontsize=16)
-
-labels = ['N=1', 'N=2', 'N=3', 'N=4']
-
-fig.legend(labels, loc='lower right', bbox_to_anchor=(1,-0.1), ncol=len(labels), bbox_transform=fig.transFigure)
-
-# Display the plot
 plt.show()
 
-#2-1
+#Queue 2-1
 
 fig, axs = plt.subplots(2, 1, figsize=(10, 8), sharex=False, sharey=False)
 
+#iterate over each N
 for i, row in enumerate(del_2_1):
-    axs[0].plot(arrival_rate_it, row)
+    axs[0].plot(arrival_rate_it, row, label='N = ' + str(i+1))
 axs[0].set_title('Queue 2-1 Delay')
-axs[0].set_xlabel("Arrival Rate")
-axs[0].set_ylabel("Difference")
+axs[0].set_xlabel("Arrival Rate (pkt/s)")
+axs[0].set_ylabel("Difference (s)")
+axs[0].legend(loc='upper left')
 
+#iterate over each N
 for i, row in enumerate(pkt_2_1):
-    axs[1].plot(arrival_rate_it, row)
-axs[1].set_title('Queue 2-1 Packet')
-axs[1].set_xlabel("Arrival Rate")
+    axs[1].plot(arrival_rate_it, row, label='N = ' + str(i+1))
+axs[1].set_title('Queue 2-1 Num. of Packets')
+axs[1].set_xlabel("Arrival Rate (pkt/s)")
 axs[1].set_ylabel("Difference")
+axs[1].legend(loc='upper left')
 
-
-# Adjust layout to prevent titles and labels from overlapping
 plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-
 plt.suptitle('Difference Theo VS Sim 2-1', fontsize=16)
-
-labels = ['N=1', 'N=2', 'N=3', 'N=4']
-
-fig.legend(labels, loc='lower right', bbox_to_anchor=(1,-0.1), ncol=len(labels), bbox_transform=fig.transFigure)
-
-# Display the plot
 plt.show()
 
-#3-1
+#Queue 3-1
 
 fig, axs = plt.subplots(2, 1, figsize=(10, 8), sharex=False, sharey=False)
 
+#iterate over each N
 for i, row in enumerate(del_3_1):
-    axs[0].plot(arrival_rate_it, row)
+    axs[0].plot(arrival_rate_it, row, label='N = ' + str(i+1))
 axs[0].set_title('Queue 3-1 Delay')
-axs[0].set_xlabel("Arrival Rate")
+axs[0].set_xlabel("Arrival Rate (pkt/s)")
 axs[0].set_ylabel("Difference")
+axs[0].legend(loc='upper left')
 
+#iterate over each N
 for i, row in enumerate(pkt_3_1):
-    axs[1].plot(arrival_rate_it, row)
-axs[1].set_title('Queue 3-1 Packet')
-axs[1].set_xlabel("Arrival Rate")
+    axs[1].plot(arrival_rate_it, row, label='N = ' + str(i+1))
+axs[1].set_title('Queue 3-1 Num. of Packets')
+axs[1].set_xlabel("Arrival Rate (pkt/s)")
 axs[1].set_ylabel("Difference")
+axs[1].legend(loc='upper left')
 
-
-# Adjust layout to prevent titles and labels from overlapping
 plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-
 plt.suptitle('Difference Theo VS Sim 3-1', fontsize=16)
-
-labels = ['N=1', 'N=2', 'N=3', 'N=4']
-
-fig.legend(labels, loc='lower right', bbox_to_anchor=(1,-0.1), ncol=len(labels), bbox_transform=fig.transFigure)
-
-# Display the plot
 plt.show()
 
